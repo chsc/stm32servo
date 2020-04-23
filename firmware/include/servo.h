@@ -75,45 +75,46 @@
  * @{
  */
 
-#define SERVO_NUM_SERVOS        24   /**< Number of supported servos. 24 servos is currently enough. */
-#define SERVO_NUM_PORTS         2    /**< Number of ports supported. Two 16 bit ports are enough for 24 servos. */
+#define SERVO_NUM_SERVOS 24 /**< Number of supported servos. 24 servos is currently enough. */
+#define SERVO_NUM_PORTS 2   /**< Number of ports supported. Two 16 bit ports are enough for 24 servos. */
 
-#define SERVO_MAX_DEG           180  /**< Maximum servo deflection. */
-#define SERVO_TICKS_PER_MS      180  /**< Sampling for a PWM servo signal. */
+#define SERVO_MAX_DEG 180      /**< Maximum servo deflection. */
+#define SERVO_TICKS_PER_MS 180 /**< Sampling for a PWM servo signal. */
 
-#define SERVO_PORT_A_INDEX 0  /**< Index for port A. */
-#define SERVO_PORT_B_INDEX 1  /**< Index for port B. */
-#define SERVO_PORT_C_INDEX 2  /**< Index for port C. */
-#define SERVO_PORT_D_INDEX 3  /**< Index for port D. */
-#define SERVO_PIN_INDEX(IDX) (1<<(IDX)) /**< Pin index for a port */
+#define SERVO_PORT_A_INDEX 0              /**< Index for port A. */
+#define SERVO_PORT_B_INDEX 1              /**< Index for port B. */
+#define SERVO_PORT_C_INDEX 2              /**< Index for port C. */
+#define SERVO_PORT_D_INDEX 3              /**< Index for port D. */
+#define SERVO_PIN_INDEX(IDX) (1 << (IDX)) /**< Pin index for a port */
 
 typedef uint16_t servo_port_t; /**< We use 16 bit ports. Typical for STM32. */
 
-typedef enum servo_led_state_s {
-    servo_led_off    = 0,
-    servo_led_on     = 1,
+typedef enum servo_led_state_s
+{
+    servo_led_off = 0,
+    servo_led_on = 1,
     servo_led_toggle = 2
-}servo_led_state_t;
+} servo_led_state_t;
 
 /**
  * @brief servo_init initializes the servo controller
  * @param port_map An array of indices mapping a servo pin to a port
  * @param pin_masks An array of GPIO pin masks for each servo index
  */
-void    servo_init                    (uint8_t *port_map, servo_port_t *pin_masks);
+void servo_init(uint8_t *port_map, servo_port_t *pin_masks);
 
 /**
  * @brief servo_enable enables a or disbales a single servo
  * @param servo_index The index of the servo to set.
  * @param state Enable or disable the servo.
  */
-void    servo_enable                  (uint8_t servo_index, bool state);
+void servo_enable(uint8_t servo_index, bool state);
 
 /**
  * @brief servo_enable_all
  * @param state Enable or disable all servos.
  */
-void    servo_enable_all              (bool state);
+void servo_enable_all(bool state);
 
 /**
  * @brief servo_set_calibration
@@ -121,7 +122,7 @@ void    servo_enable_all              (bool state);
  * @param min_phase_us Minimum phase value for 0°
  * @param max_phase_us Maximum phase value for 180°
  */
-void    servo_set_calibration         (uint8_t servo_index, uint16_t min_phase_us, uint16_t max_phase_us);
+void servo_set_calibration(uint8_t servo_index, uint16_t min_phase_us, uint16_t max_phase_us);
 
 /**
  * @brief servo_set_angle_timed
@@ -129,47 +130,47 @@ void    servo_set_calibration         (uint8_t servo_index, uint16_t min_phase_u
  * @param angle The angle.
  * @param time The time in ms.
  */
-void    servo_set_angle_timed         (uint8_t servo_index, uint8_t angle, uint16_t time);
+void servo_set_angle_timed(uint8_t servo_index, uint8_t angle, uint16_t time);
 
 /**
  * @brief servo_set_angle_timed_all
  * @param angles Angles to set.
  * @param times The time ein ms.
  */
-void    servo_set_angle_timed_all     (uint8_t *angles, uint16_t *times);
+void servo_set_angle_timed_all(uint8_t *angles, uint16_t *times);
 
 /**
  * @brief servo_set_angle
  * @param servo_index The index of the servo to set.
  * @param angle The angle.
  */
-void    servo_set_angle               (uint8_t servo_index, uint8_t angle);
+void servo_set_angle(uint8_t servo_index, uint8_t angle);
 
 /**
  * @brief servo_set_angle_all
  * @param angle Angles to set.
  */
-void    servo_set_angle_all           (uint8_t *angles);
+void servo_set_angle_all(uint8_t *angles);
 
 /**
  * @brief servo_update linear interpolates all phases and generates a pin mask that can be used
  *        to generate a PWM signal.
  * @param delta_time Delta time, usually 20 ms.
  */
-void    servo_update                  (uint16_t delta_time);
+void servo_update(uint16_t delta_time);
 
 /**
  * @brief Generates a PWM signal. Must be called every 1/180 of a millisecond.
  * @return true Is currently generating a PWM signal.
  * @return false Is currenly not generating a PWM signal.
  */
-bool    servo_generate_pwm            ();
+bool servo_generate_pwm();
 
 /**
  * @brief Puts a character in the ring buffer
  * @param ch Character to put
  */
-void    servo_put_char_to_ring_buffer  (char ch);
+void servo_put_char_to_ring_buffer(char ch);
 
 /** @}*/
 

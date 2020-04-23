@@ -26,7 +26,7 @@
 #include "servo.h"
 
 #define LED_PORT (GPIOC)
-#define LED_PIN  (GPIO13)
+#define LED_PIN (GPIO13)
 
 mutex_t mtx;
 volatile bool is_generating_pwm = false;
@@ -62,12 +62,12 @@ static void usart_setup(void)
 	AFIO_MAPR |= AFIO_MAPR_USART1_REMAP;
 
 	//Configure USART1 RX on PB11
-	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, 
-		GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_RE_TX);
+	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
+				  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_RE_TX);
 
 	gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
-		GPIO_CNF_INPUT_FLOAT, GPIO_USART1_RE_RX);
-	
+				  GPIO_CNF_INPUT_FLOAT, GPIO_USART1_RE_RX);
+
 	usart_set_baudrate(USART1, 115200);
 	usart_set_databits(USART1, 8);
 	usart_set_stopbits(USART1, USART_STOPBITS_1);
@@ -170,10 +170,17 @@ void servo_ext_clear_pins(servo_port_t *set_pins)
 
 void servo_ext_set_led(servo_led_state_t state)
 {
-	switch(state) {
-		case servo_led_off: gpio_set(LED_PORT, LED_PIN); break;
-		case servo_led_on: gpio_clear(LED_PORT, LED_PIN); break;
-		case servo_led_toggle: gpio_toggle(LED_PORT, LED_PIN); break;
+	switch (state)
+	{
+	case servo_led_off:
+		gpio_set(LED_PORT, LED_PIN);
+		break;
+	case servo_led_on:
+		gpio_clear(LED_PORT, LED_PIN);
+		break;
+	case servo_led_toggle:
+		gpio_toggle(LED_PORT, LED_PIN);
+		break;
 	}
 }
 
@@ -188,17 +195,18 @@ void servo_unlock()
 }
 
 void sys_tick_handler(void)
-{	
+{
 	is_generating_pwm = servo_generate_pwm();
 }
 
 void usart1_isr(void)
 {
-  static uint8_t data = 0xff;
-  if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) && ((USART_SR(USART1) & USART_SR_RXNE) != 0)) {
-    data = usart_recv(USART1);
-	servo_put_char_to_ring_buffer(data);
-  }
+	static uint8_t data = 0xff;
+	if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) && ((USART_SR(USART1) & USART_SR_RXNE) != 0))
+	{
+		data = usart_recv(USART1);
+		servo_put_char_to_ring_buffer(data);
+	}
 }
 
 int main(void)
@@ -209,10 +217,13 @@ int main(void)
 	usart_setup();
 	systick_setup();
 
-	for(;;) {
-		while(is_generating_pwm);
+	for (;;)
+	{
+		while (is_generating_pwm)
+			;
 		servo_update(20);
-		while(!is_generating_pwm);
+		while (!is_generating_pwm)
+			;
 	}
 
 	return 0;
