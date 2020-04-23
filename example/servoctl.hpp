@@ -5,11 +5,16 @@
 #include <cstdint>
 #include <string>
 
-enum class led_state : std::uint8_t {
-  off = 0, on = 1, toggle = 2, automatic = 3
+enum class led_state : std::uint8_t
+{
+  off = 0,
+  on = 1,
+  toggle = 2,
+  automatic = 3
 };
 
-class servoctl {
+class servoctl
+{
 public:
   servoctl(const servoctl &sc) = delete;
   servoctl(servoctl &&sc);
@@ -20,16 +25,16 @@ public:
   servoctl &operator=(servoctl &&sc);
 
   bool set_led(led_state);
-  
+
   bool enable_servo(uint8_t servo_index, bool enable);
   bool enable_all_servos(bool enable);
-  
+
   bool set_angle_timed(std::uint8_t servo_index, std::uint8_t angle, std::uint16_t time_ms);
   bool set_all_angles_timed(std::uint8_t *angle, std::uint16_t *time_ms);
   bool set_angle(uint8_t servo_index, uint8_t angle);
   bool set_all_angles(uint8_t *angles);
 
-  bool set_callibration(std::uint8_t servo_index, std::uint16_t min_phase_us, std::uint16_t max_phase_us);
+  bool set_calibration(std::uint8_t servo_index, std::uint16_t min_phase_us, std::uint16_t max_phase_us);
 
   bool flush();
 
@@ -46,4 +51,3 @@ private:
 };
 
 #endif
-

@@ -166,7 +166,7 @@ void    servo_update                  (uint16_t delta_time);
 bool    servo_generate_pwm            ();
 
 /**
- * @brief puts a character in the ringbuffer
+ * @brief Puts a character in the ring buffer
  * @param ch Character to put
  */
 void    servo_put_char_to_ring_buffer  (char ch);
