@@ -2,9 +2,11 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <cstring>
 #include <cstdint>
 #include <thread>
 #include <chrono>
+#include <iostream>
 #include "servoctl.hpp"
 
 // https://en.wikibooks.org/wiki/Serial_Programming/termios
@@ -52,23 +54,27 @@ void servoctl::open(const std::string &device)
 	fd = ::open(device.c_str(), O_RDWR | O_NOCTTY | O_NDELAY);
 	if (fd == -1)
 	{
+		std::cerr << "servoctl: " << strerror(errno) << std::endl;
 		return;
 	}
 
 	if (::tcgetattr(fd, &attribs) < 0)
 	{
+		std::cerr << "servoctl: " << strerror(errno) << std::endl;
 		close();
 		return;
 	}
 
 	if (::cfsetospeed(&attribs, B115200) < 0)
 	{
+		std::cerr << "servoctl: " << strerror(errno) << std::endl;
 		close();
 		return;
 	}
 
 	if (::cfsetispeed(&attribs, B115200) < 0)
 	{
+		std::cerr << "servoctl: " << strerror(errno) << std::endl;
 		close();
 		return;
 	}
@@ -81,6 +87,7 @@ void servoctl::open(const std::string &device)
 
 	if (::tcsetattr(fd, TCSANOW, &attribs) < 0)
 	{
+		std::cerr << "servoctl: " << strerror(errno) << std::endl;
 		close();
 		return;
 	}
