@@ -45,6 +45,9 @@ static void clock_setup()
 
 static void gpio_setup(void)
 {
+	// disable JTAG on pin PB3, PB4 and PA15 to use them as normal outputs
+	AFIO_MAPR |= AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_ON;
+
 	// servo pins
 	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO0 | GPIO1 | GPIO2 | GPIO3 | GPIO4 | GPIO5 | GPIO6 | GPIO7 | GPIO8 | GPIO9 | GPIO10 | GPIO11 | GPIO12 | GPIO15);
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO0 | GPIO1 | GPIO3 | GPIO4 | GPIO5 | GPIO8 | GPIO9 | GPIO10 | GPIO11 | GPIO15);
@@ -55,7 +58,7 @@ static void gpio_setup(void)
 
 static void usart_setup(void)
 {
-	//Enable USART1 RX Int
+	// Enable USART1 RX Int
 	nvic_enable_irq(NVIC_USART1_IRQ);
 
 	// Enable USART1 pin software remapping.
