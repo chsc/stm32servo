@@ -4,17 +4,17 @@
  * Copyright (C) 2020 Christoph Schunk <schunk.christoph@gmail.com>
  *
  * This library is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
+ * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <libopencm3/stm32/rcc.h>
@@ -67,9 +67,9 @@ static void usart_setup(void)
 	//Configure USART1 RX on PB11
 	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ,
 				  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_USART1_RE_TX);
-
 	gpio_set_mode(GPIOB, GPIO_MODE_INPUT,
 				  GPIO_CNF_INPUT_FLOAT, GPIO_USART1_RE_RX);
+	//gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_USART1_RE_TX | GPIO_USART1_RE_RX);
 
 	usart_set_baudrate(USART1, 115200);
 	usart_set_databits(USART1, 8);
@@ -78,7 +78,7 @@ static void usart_setup(void)
 	usart_set_parity(USART1, USART_PARITY_NONE);
 	usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
 
-	// Enable USART2 RX Int
+	// Enable USART1 RX Int
 	USART_CR1(USART1) |= USART_CR1_RXNEIE;
 
 	usart_enable(USART1);
@@ -187,14 +187,27 @@ void servo_ext_set_led(servo_led_state_t state)
 	}
 }
 
-void servo_lock()
+void servo_ext_lock()
 {
 	mutex_lock(&mtx);
 }
 
-void servo_unlock()
+void servo_ext_unlock()
 {
 	mutex_unlock(&mtx);
+}
+
+void servo_ext_write_ring_buffer()
+{
+	USART_CR1(USART1) |= USART_CR1_TXEIE;
+}
+
+void servo_ext_crash()
+{
+	for (;;)
+	{
+		servo_ext_set_led(servo_led_toggle);
+	}
 }
 
 void sys_tick_handler(void)
@@ -205,10 +218,25 @@ void sys_tick_handler(void)
 void usart1_isr(void)
 {
 	static uint8_t data = 0xff;
-	if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) && ((USART_SR(USART1) & USART_SR_RXNE) != 0))
+
+	if (((USART_CR1(USART1) & USART_CR1_RXNEIE) != 0) &&
+		((USART_SR(USART1) & USART_SR_RXNE) != 0))
 	{
 		data = usart_recv(USART1);
-		servo_put_char_to_ring_buffer(data);
+		servo_put_char_to_rx_buffer(data);
+	}
+
+	if (((USART_CR1(USART1) & USART_CR1_TXEIE) != 0) &&
+		((USART_SR(USART1) & USART_SR_TXE) != 0))
+	{
+		if(servo_get_char_from_tx_buffer(&data))
+		{
+			usart_send(USART1, data);
+		}
+		else 
+		{
+			USART_CR1(USART1) &= ~USART_CR1_TXEIE; // disable TX interrupt
+		}
 	}
 }
 

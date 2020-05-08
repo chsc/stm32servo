@@ -4,17 +4,17 @@
  * Copyright (C) 2020 Christoph Schunk <schunk.christoph@gmail.com>
  *
  * This library is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
+ * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /**
@@ -78,7 +78,6 @@
 #define SERVO_NUM_SERVOS 24 /**< Number of supported servos. 24 servos is currently enough. */
 #define SERVO_NUM_PORTS 2   /**< Number of ports supported. Two 16 bit ports are enough for 24 servos. */
 
-#define SERVO_MAX_DEG 180      /**< Maximum servo deflection. */
 #define SERVO_TICKS_PER_MS 180 /**< Sampling for a PWM servo signal. */
 
 #define SERVO_PORT_A_INDEX 0              /**< Index for port A. */
@@ -122,7 +121,7 @@ void servo_enable_all(bool state);
  * @param min_phase_us Minimum phase value for 0°
  * @param max_phase_us Maximum phase value for 180°
  */
-void servo_set_calibration(uint8_t servo_index, uint16_t min_phase_us, uint16_t max_phase_us);
+void servo_set_calibration(uint8_t servo_index, uint8_t min_angle, uint8_t max_angle, uint16_t min_phase_us, uint16_t max_phase_us);
 
 /**
  * @brief servo_set_angle_timed
@@ -170,7 +169,13 @@ bool servo_generate_pwm();
  * @brief Puts a character in the ring buffer
  * @param ch Character to put
  */
-void servo_put_char_to_ring_buffer(char ch);
+void servo_put_char_to_rx_buffer(char ch);
+
+/**
+ * @brief GEts a character in the tx ring buffer
+ * @param ch Character to put
+ */
+bool servo_get_char_from_tx_buffer(char *ch);
 
 /** @}*/
 

@@ -4,17 +4,17 @@
  * Copyright (C) 2020 Christoph Schunk <schunk.christoph@gmail.com>
  *
  * This library is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
+ * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
  *
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
  */
 
 /**
@@ -32,16 +32,15 @@
 
 #define US_TO_TICKS(US) ((uint32_t)(US)*SERVO_TICKS_PER_MS / 1000)							 /**< Convert µs to phase index. */
 #define TICKS_TO_US(PH) ((uint32_t)(PH)*1000 / SERVO_TICKS_PER_MS)							 /**< Convert a phase index to phase to µs. */
-#define TICKS_MIN_DEFAULT_VALUE US_TO_TICKS(800)											 /**< Minimum value for servo phase. */
-#define TICKS_MAX_DEFAULT_VALUE US_TO_TICKS(2600)											 /**< Maximum value for servo phase. */
+#define PWM_LENGTH_MIN_DEFAULT_VALUE 800           										  	 /**< Minimum value for servo phase. */
+#define PWM_LENGTH_MAX_DEFAULT_VALUE 2600
+#define TICKS_MIN_DEFAULT_VALUE US_TO_TICKS(PWM_LENGTH_MIN_DEFAULT_VALUE)					 /**< Minimum value for servo phase. */
+#define TICKS_MAX_DEFAULT_VALUE US_TO_TICKS(PWM_LENGTH_MAX_DEFAULT_VALUE)				     /**< Maximum value for servo phase. */
 #define TICKS_MIN_POSSIBLE_VALUE US_TO_TICKS(500)											 /**< Smalles possible phase value. */
 #define TICKS_MAX_POSSIBLE_VALUE US_TO_TICKS(3000)											 /**< Bigges possible phase value. */
 #define SERVO_TICKS_BUFFER_ENTRIES (TICKS_MAX_POSSIBLE_VALUE - TICKS_MIN_POSSIBLE_VALUE + 1) /**< Size of phase buffer */
 
 #define TIME_LINE_BUFFER_SIZE 128 // not bigger than 256
-
-#define TICKS_MIN_INDEX 0
-#define TICKS_MAX_INDEX 1
 
 #define CMD_SET_SERVO_TIMED 0x01
 #define CMD_SET_ALL_SERVOS_TIMED 0x11
@@ -50,14 +49,29 @@
 #define CMD_ENABLE_SERVO 0x03
 #define CMD_ENABLE_ALL_SERVOS 0x13
 #define CMD_SET_CALIBRATION 0x04
+#define CMD_GET_CALIBRATIONS 0x15
 #define CMD_SET_LED 0xa0
 
 #define CMD_SET_LED_AUTO 3
 
 #define USART_RING_BUFFER_SIZE 256
 
-#define SET_PIN_IN_USE(I) (servo_port_set_pins[servo_port_map[I]] |= servo_pin_mask_map[I])
-#define SET_PIN_NOT_IN_USE(I) (servo_port_set_pins[servo_port_map[I]] &= ~servo_pin_mask_map[I])
+#define SET_PIN(PINS, I) ((PINS)[servo_port_map[I]] |= servo_pin_mask_map[I])
+#define CLEAR_PIN(PINS, I) ((PINS)[servo_port_map[I]] &= ~servo_pin_mask_map[I])
+
+typedef struct ring_buffer
+{
+	char buffer[USART_RING_BUFFER_SIZE];
+	int write_index;
+	int read_index;
+} ring_buffer_t;
+
+typedef struct servo_calib
+{
+	uint8_t min_angle, max_angle;
+	uint16_t min_length_us, max_length_us;
+	uint16_t min_length_ticks, max_length_ticks;
+} servo_calib_t;
 
 typedef enum parser_state
 {
@@ -68,7 +82,7 @@ typedef enum parser_state
 	parser_set_all_servos_timed,
 	parser_enable_servo,
 	parser_enable_all_servos,
-	parser_calib_servo,
+	parser_set_calib,
 	parser_set_led
 } parser_state_t;
 
@@ -78,7 +92,7 @@ servo_port_t servo_port_set_pins[SERVO_NUM_PORTS];
 servo_port_t servo_port_clear_pins[SERVO_TICKS_BUFFER_ENTRIES][SERVO_NUM_PORTS];
 uint16_t time_ticks = 0;
 
-uint16_t calib_servo_phases[SERVO_NUM_SERVOS][2];
+servo_calib_t servo_calibration[SERVO_NUM_SERVOS];
 
 uint16_t time_line_phases[SERVO_NUM_SERVOS][TIME_LINE_BUFFER_SIZE];
 uint16_t time_line_timings[SERVO_NUM_SERVOS][TIME_LINE_BUFFER_SIZE];
@@ -90,21 +104,58 @@ uint16_t time_line_current_phase[SERVO_NUM_SERVOS];
 
 volatile bool auto_led = true;
 
-char usart_buffer[USART_RING_BUFFER_SIZE];
-int usart_buffer_write_index = 0;
-int usart_buffer_read_index = 0;
+ring_buffer_t rx_buffer;
+ring_buffer_t tx_buffer;
 
 extern void servo_ext_set_pins(servo_port_t *ports);
 extern void servo_ext_clear_pins(servo_port_t *ports);
 extern void servo_ext_set_led(servo_led_state_t state);
-extern void servo_lock();
-extern void servo_unlock();
+extern void servo_ext_write_ring_buffer();
+extern void servo_ext_lock();
+extern void servo_ext_unlock();
+extern void servo_ext_crash();
+
+static void ringb_init(ring_buffer_t *rb)
+{
+	rb->read_index = 0;
+	rb->write_index = 0;
+}
+
+static bool ringb_get_char(ring_buffer_t *rb, char *ch)
+{
+	servo_ext_lock();
+	if (rb->write_index == rb->read_index)
+	{
+		servo_ext_unlock();
+		return false;
+	}
+	*ch = rb->buffer[rb->read_index++];
+	rb->read_index %= USART_RING_BUFFER_SIZE;
+	servo_ext_unlock();
+	return true;
+}
+
+static void ringb_put_char(ring_buffer_t *rb, char ch)
+{
+	servo_ext_lock();
+	rb->buffer[rb->write_index++] = ch;
+	rb->write_index %= USART_RING_BUFFER_SIZE;
+	if (rb->write_index == rb->read_index)
+	{
+		servo_ext_crash();
+	}
+	servo_ext_unlock();
+}
 
 static uint16_t angle_to_phase_length(uint8_t servo_index, uint8_t angle)
 {
-	const uint32_t minp = calib_servo_phases[servo_index][TICKS_MIN_INDEX];
-	const uint32_t maxp = calib_servo_phases[servo_index][TICKS_MAX_INDEX];
-	return minp + ((maxp - minp) * angle) / SERVO_MAX_DEG;
+	const servo_calib_t *c = &servo_calibration[servo_index];
+
+	const int16_t a = (int16_t)c->max_angle - angle;
+	const int16_t ad = (int16_t)c->max_angle - c->min_angle;
+	const int16_t ld = (int16_t)c->max_length_ticks - c->min_length_ticks;
+	
+	return c->min_length_ticks + a * ld / ad;
 }
 
 static void prepare_set_pins()
@@ -130,7 +181,7 @@ static void prepare_clear_pins()
 		{
 			if (tick > time_line_current_phase[s])
 			{
-				servo_port_clear_pins[t][servo_port_map[s]] |= servo_pin_mask_map[s];
+				SET_PIN(servo_port_clear_pins[t], s);
 			}
 		}
 	}
@@ -170,11 +221,30 @@ static void interpolate_all_pwms(uint16_t delta_time_ms)
 	}
 }
 
+static void send_calibration_data()
+{
+	for(int i = 0; i < SERVO_NUM_SERVOS; i++) {
+		ringb_put_char(&tx_buffer, servo_calibration[i].min_angle);
+	}
+	for(int i = 0; i < SERVO_NUM_SERVOS; i++) {
+		ringb_put_char(&tx_buffer, servo_calibration[i].max_angle);
+	}
+	for(int i = 0; i < SERVO_NUM_SERVOS; i++) {
+		ringb_put_char(&tx_buffer, servo_calibration[i].min_length_us);
+		ringb_put_char(&tx_buffer, servo_calibration[i].min_length_us >> 8);
+	}
+	for(int i = 0; i < SERVO_NUM_SERVOS; i++) {
+		ringb_put_char(&tx_buffer, servo_calibration[i].max_length_us);
+		ringb_put_char(&tx_buffer, servo_calibration[i].max_length_us >> 8);
+	}
+	servo_ext_write_ring_buffer();
+}
+
 static void process_char(char ch)
 {
 	static parser_state_t state = parser_start;
 	static int parser_offset = 0;
-	static uint8_t servo_index, servo_angle;
+	static uint8_t servo_index, servo_angle, min_angle, max_angle;
 	static uint16_t servo_timing, servo_min_phase, servo_max_phase;
 	static uint8_t servo_angles[SERVO_NUM_SERVOS];
 	static uint16_t servo_timings[SERVO_NUM_SERVOS];
@@ -208,7 +278,12 @@ static void process_char(char ch)
 		}
 		else if (ch == CMD_SET_CALIBRATION)
 		{
-			state = parser_calib_servo;
+			state = parser_set_calib;
+		}
+		else if(ch == CMD_GET_CALIBRATIONS)
+		{
+			send_calibration_data();
+			// no parameters
 		}
 		else if (ch == CMD_SET_LED)
 		{
@@ -306,7 +381,7 @@ static void process_char(char ch)
 		servo_enable_all(ch);
 		state = parser_start;
 		return;
-	case parser_calib_servo:
+	case parser_set_calib:
 		switch (parser_offset)
 		{
 		case 0:
@@ -314,20 +389,28 @@ static void process_char(char ch)
 			parser_offset++;
 			return;
 		case 1:
-			servo_min_phase = ch;
+			min_angle = ch;
 			parser_offset++;
 			return;
 		case 2:
-			servo_min_phase |= (uint16_t)ch << 8;
+			max_angle = ch;
 			parser_offset++;
 			return;
 		case 3:
-			servo_max_phase = ch;
+			servo_min_phase = ch;
 			parser_offset++;
 			return;
 		case 4:
+			servo_min_phase |= (uint16_t)ch << 8;
+			parser_offset++;
+			return;
+		case 5:
+			servo_max_phase = ch;
+			parser_offset++;
+			return;
+		case 6:
 			servo_max_phase |= (uint16_t)ch << 8;
-			servo_set_calibration(servo_index, servo_min_phase, servo_max_phase);
+			servo_set_calibration(servo_index, min_angle, max_angle, servo_min_phase, servo_max_phase);
 			state = parser_start;
 			return;
 		}
@@ -347,24 +430,10 @@ static void process_char(char ch)
 	}
 }
 
-static bool get_char_from_ringbuffer(char *ch)
-{
-	servo_lock();
-	if (usart_buffer_write_index == usart_buffer_read_index)
-	{
-		servo_unlock();
-		return false;
-	}
-	*ch = usart_buffer[usart_buffer_read_index++];
-	usart_buffer_read_index %= USART_RING_BUFFER_SIZE;
-	servo_unlock();
-	return true;
-}
-
-static void process_usart_ringbuffer()
+static void process_usart_rx_ringbuffer()
 {
 	char ch;
-	while (get_char_from_ringbuffer(&ch))
+	while (ringb_get_char(&rx_buffer, &ch))
 	{
 		process_char(ch);
 	}
@@ -372,14 +441,21 @@ static void process_usart_ringbuffer()
 
 void servo_init(uint8_t *pmap, servo_port_t *pmasks)
 {
+	ringb_init(&rx_buffer);
+	ringb_init(&tx_buffer);
+
 	// copy servo pin mask and port map
 	memcpy(servo_port_map, pmap, sizeof(servo_port_map));
 	memcpy(servo_pin_mask_map, pmasks, sizeof(servo_pin_mask_map));
 
 	for (size_t i = 0; i < SERVO_NUM_SERVOS; i++)
 	{
-		calib_servo_phases[i][TICKS_MIN_INDEX] = TICKS_MIN_DEFAULT_VALUE;
-		calib_servo_phases[i][TICKS_MAX_INDEX] = TICKS_MAX_DEFAULT_VALUE;
+		servo_calibration[i].min_angle = 0;
+		servo_calibration[i].max_angle = 180;
+		servo_calibration[i].min_length_us = PWM_LENGTH_MIN_DEFAULT_VALUE;
+		servo_calibration[i].max_length_us = PWM_LENGTH_MAX_DEFAULT_VALUE;
+		servo_calibration[i].min_length_ticks = TICKS_MIN_DEFAULT_VALUE;
+		servo_calibration[i].max_length_ticks = TICKS_MAX_DEFAULT_VALUE;
 
 		time_line_current_phase[i] = (TICKS_MIN_DEFAULT_VALUE + TICKS_MAX_DEFAULT_VALUE) / 2;
 		time_line_prev_phase[i] = time_line_current_phase[i];
@@ -399,11 +475,11 @@ void servo_enable(uint8_t servo_index, bool state)
 
 	if (state)
 	{
-		SET_PIN_IN_USE(servo_index);
+		SET_PIN(servo_port_set_pins, servo_index);
 	}
 	else
 	{
-		SET_PIN_NOT_IN_USE(servo_index);
+		CLEAR_PIN(servo_port_set_pins, servo_index);
 	}
 }
 
@@ -413,28 +489,32 @@ void servo_enable_all(bool state)
 	{
 		for (size_t i = 0; i < SERVO_NUM_SERVOS; i++)
 		{
-			SET_PIN_IN_USE(i);
+			SET_PIN(servo_port_set_pins, i);
 		}
 	}
 	else
 	{
 		for (size_t i = 0; i < SERVO_NUM_SERVOS; i++)
 		{
-			SET_PIN_NOT_IN_USE(i);
+			CLEAR_PIN(servo_port_set_pins, i);
 		}
 	}
 }
 
-void servo_set_calibration(uint8_t servo_index, uint16_t min_phase_us, uint16_t max_phase_us)
+void servo_set_calibration(uint8_t servo_index, uint8_t min_angle, uint8_t max_angle, uint16_t min_phase_us, uint16_t max_phase_us)
 {
 	if (servo_index >= SERVO_NUM_SERVOS)
 		return;
 
-	const uint16_t minp = US_TO_TICKS(min_phase_us);
-	const uint16_t maxp = US_TO_TICKS(max_phase_us);
+	const uint16_t mint = US_TO_TICKS(min_phase_us);
+	const uint16_t maxt = US_TO_TICKS(max_phase_us);
 
-	calib_servo_phases[servo_index][TICKS_MIN_INDEX] = minp;
-	calib_servo_phases[servo_index][TICKS_MAX_INDEX] = maxp;
+	servo_calibration[servo_index].min_angle = min_angle;
+	servo_calibration[servo_index].max_angle = max_angle;
+	servo_calibration[servo_index].min_length_us = min_phase_us;
+	servo_calibration[servo_index].max_length_us = max_phase_us;
+	servo_calibration[servo_index].min_length_ticks = mint;
+	servo_calibration[servo_index].max_length_ticks = maxt;
 }
 
 void servo_set_angle_timed(uint8_t servo_index, uint8_t angle, uint16_t delta_time)
@@ -493,11 +573,13 @@ void servo_set_angle_all(uint8_t *angles)
 
 void servo_update(uint16_t delta_time_ms)
 {
-	process_usart_ringbuffer();
+	process_usart_rx_ringbuffer();
 	interpolate_all_pwms(delta_time_ms);
 	prepare_clear_pins();
 	if (auto_led)
-		servo_ext_set_led(2);
+	{
+		servo_ext_set_led(servo_led_toggle);
+	}
 }
 
 bool servo_generate_pwm()
@@ -529,18 +611,12 @@ bool servo_generate_pwm()
 	return false;
 }
 
-void servo_put_char_to_ring_buffer(char ch)
+void servo_put_char_to_rx_buffer(char ch)
 {
-	servo_lock();
-	usart_buffer[usart_buffer_write_index++] = ch;
-	usart_buffer_write_index %= USART_RING_BUFFER_SIZE;
-	if (usart_buffer_write_index == usart_buffer_read_index)
-	{
-		// overflow -> crash: buffer is to small!!!
-		for (;;)
-		{
-			servo_ext_set_led(servo_led_toggle);
-		}
-	}
-	servo_unlock();
+	ringb_put_char(&rx_buffer, ch);
+}
+
+bool servo_get_char_from_tx_buffer(char *ch)
+{
+	return ringb_get_char(&tx_buffer, ch);
 }

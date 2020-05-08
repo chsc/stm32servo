@@ -43,6 +43,8 @@ int main(int argc, char **argv)
 	std::cout << " ds <servo_index>                          Disable servo.\n";
 	std::cout << " ea                                        Enable all servos.\n";
 	std::cout << " da                                        Disable all servos.\n";
+	std::cout << " sc <si> <min_a> <max_a> <min_t_ms> <min_t_ms> \n";
+	std::cout << " gc                                        Get all calibrations\n";
 	std::cout << " ts <servo_index> <reps> <timing_in_ms>    Do a simple test on a servo channel (window wiper).\n";
 	std::cout << " tsa <reps> <timing_in_ms>                 Do a simple test on all servo channels (window wiper).\n";
 	std::cout << " test1                                     Test sequence 1.\n";
@@ -52,6 +54,9 @@ int main(int argc, char **argv)
 
 	std::string line, cmd;
 	int servo_index, angle, timing, reps;
+	uint8_t min_angles[NUM_SERVOS], max_angles[NUM_SERVOS];
+	uint16_t min_len_us[NUM_SERVOS], max_len_us[NUM_SERVOS];
+	int min_angle, max_angle, min_l_us, max_l_us;
 	int enabled;
 
 	if (!sc.enable_all_servos(true))
@@ -113,10 +118,10 @@ int main(int argc, char **argv)
 				parsing_error();
 				continue;
 			}
-			std::uint8_t angles[24];
-			std::uint16_t timings[24];
-			std::fill_n(angles, 24, angle);
-			std::fill_n(timings, 24, timing);
+			std::uint8_t angles[NUM_SERVOS];
+			std::uint16_t timings[NUM_SERVOS];
+			std::fill_n(angles, NUM_SERVOS, angle);
+			std::fill_n(timings, NUM_SERVOS, timing);
 			if (!sc.set_all_angles_timed(angles, timings))
 			{
 				send_error();
@@ -185,12 +190,32 @@ int main(int argc, char **argv)
 				{
 					send_error();
 				}
-				//std::this_thread::sleep_for(std::chrono::milliseconds(timing));
 				if (!sc.set_angle_timed(servo_index, 180, timing))
 				{
 					send_error();
 				}
-				//std::this_thread::sleep_for(std::chrono::milliseconds(timing));
+			}
+		}
+		else if (cmd == "sc") 
+		{
+			if (!(ss >> servo_index >> min_angle >> max_angle >> min_l_us >> max_l_us))
+			{
+				parsing_error();
+				continue;
+			}
+			if(!sc.set_calibration(servo_index, min_angle, max_angle, min_l_us, max_l_us)) {
+				send_error();
+			}			
+		}
+		else if (cmd == "gc") 
+		{
+			if(!sc.get_calibrations(min_angles, max_angles, min_len_us, max_len_us)) {
+				send_error();
+				continue;
+			}
+			for(int i = 0; i < NUM_SERVOS; i++) {
+				std::cout << i << ": " << (int)min_angles[i] << "° - " << (int)max_angles[i] << "°, "
+					<< min_len_us[i] << " µs - " << max_len_us[i] << " µs" << std::endl;
 			}
 		}
 		else if (cmd == "tsa")

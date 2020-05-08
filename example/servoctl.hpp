@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+constexpr std::uint8_t NUM_SERVOS = 24;
+
 enum class led_state : std::uint8_t
 {
   off = 0,
@@ -34,7 +36,14 @@ public:
   bool set_angle(uint8_t servo_index, uint8_t angle);
   bool set_all_angles(uint8_t *angles);
 
-  bool set_calibration(std::uint8_t servo_index, std::uint16_t min_phase_us, std::uint16_t max_phase_us);
+  bool set_calibration(
+    std::uint8_t servo_index,
+    std::uint8_t min_angle, std::uint8_t max_angle,
+    std::uint16_t min_phase_us, std::uint16_t max_phase_us);
+
+  bool get_calibrations(
+    std::uint8_t min_angle[], std::uint8_t max_angle[],
+    std::uint16_t min_phase_us[], std::uint16_t max_phase_us[]);
 
   bool flush();
 
